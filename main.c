@@ -716,6 +716,9 @@ static void messageArrived(MessageData* data) {
             stopped = 0;
             Mode = 1;
             run_controller();
+
+            stopped = 1;    // If we return, stopped
+            Mode = 0;
         }
 
     } else if (strcmp(buf, "stop") == 0) {
