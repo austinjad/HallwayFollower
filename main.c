@@ -65,15 +65,19 @@
 #include "../inc/opt3101.h"
 #include "../inc/OPT3001.h"
 #include "../inc/I2CB1.h"
-#include "Lab21_OPT3101_TestMain.h"
+#include "Controller.h"
 
 /*
  * Values for below macros shall be modified per the access-point's (AP) properties
  * SimpleLink device will connect to following AP when the application is executed
  */
-#define SSID_NAME       "Aurimas"       /* Access point name to connect to. */
+
+//#define SSID_NAME       "Aurimas"       /* Access point name to connect to. */
+//#define PASSKEY         "iamnotarobot"   /* Password in case of secure AP */
+#define SSID_NAME "Fios-EAWHY"
+#define PASSKEY "out02risked253hats"
+
 #define SEC_TYPE        SL_SEC_TYPE_WPA_WPA2     /* Security type of the Access piont */
-#define PASSKEY         "iamnotarobot"   /* Password in case of secure AP */
 #define PASSKEY_LEN     pal_Strlen(PASSKEY)  /* Password length in case of secure AP */
 
 /*
@@ -414,6 +418,7 @@ enum TachDirection leftDir;
 int32_t leftSteps;
 enum TachDirection rightDir;
 int32_t rightSteps;
+uint32_t leftDist, centerDist, rightDist;
 int8_t stopped = 1;
 
 void MQTT_Callback() {
@@ -450,12 +455,16 @@ void MQTT_Callback() {
     msg.qos = QOS0;
     msg.retained = 0;
 
-    // Reading Tach
+    // Reading Tach & Distances
     if (stopped == 0) {
+        GetDistances(&leftDist, &centerDist, &rightDist);
         Tachometer_Get(&leftTach, &leftDir, &leftSteps, &rightTach, &rightDir, &rightSteps);
     } else {
         leftTach = 0;
         rightTach = 0;
+        leftDist = 0;
+        centerDist = 0;
+        rightDist = 0;
     }
 
     char buffer[25];
@@ -463,7 +472,15 @@ void MQTT_Callback() {
     for (i = 0; i < 25; i++) {
         buffer[i] = 0;
     }
-    sprintf(buffer, "%d,%d,%d,%d,%d,", 2000000/leftTach, 2000000/rightTach, 0, 0, 0);
+    sprintf(
+        buffer,
+        "%d,%d,%d,%d,%d,",
+        2000000/leftTach,
+        2000000/rightTach,
+        leftDist,
+        centerDist,
+        rightDist
+    );
 
     msg.payload = buffer;
     msg.payloadlen = 25;
@@ -500,7 +517,6 @@ int main(int argc, char** argv)
     Distances[0] = 0;
     Distances[1] = 0;
     Distances[2] = 0;
-    uint8_t channel = 0;
 
     Clock_Init48MHz();
     Motor_Init();
@@ -641,10 +657,10 @@ int main(int argc, char** argv)
     rc = MQTTSubscribe(&hMQTTClient, SUBSCRIBE_TOPIC, QOS0, messageArrived);
 
     if (rc != 0) {
-        CLI_Write(" Failed to subscribe to /msp/cc3100/demo topic \n\r");
+        CLI_Write(" Failed to subscribe to topic \n\r");
         LOOP_FOREVER();
     }
-    CLI_Write(" Subscribed to /msp/cc3100/demo topic \n\r");
+    CLI_Write(" Subscribed to topic \n\r");
 
     rc = MQTTSubscribe(&hMQTTClient, uniqueID, QOS0, messageArrived);
 
@@ -652,7 +668,7 @@ int main(int argc, char** argv)
         CLI_Write(" Failed to subscribe to uniqueID topic \n\r");
         LOOP_FOREVER();
     }
-    CLI_Write(" Subscribed to uniqueID topic \n\r");
+    CLI_Write(" Waiting for messages. \n\r");
 
     while(1){
         MQTT_Callback();
@@ -671,9 +687,6 @@ int main(int argc, char** argv)
 //****************************************************************************
 static void messageArrived(MessageData* data) {
     char buf[BUFF_SIZE];
-
-    char *tok;
-    long color;
 
     // Check for buffer overflow
     if (data->topicName->lenstring.len >= BUFF_SIZE) {
@@ -695,25 +708,15 @@ static void messageArrived(MessageData* data) {
         min(BUFF_SIZE, data->message->payloadlen));
     buf[data->message->payloadlen] = 0;
 
-    /* LED Default Code
-    tok = strtok(buf, " ");
-    color = strtol(tok, NULL, 10);
-    TA0CCR1 = PWM_PERIOD * (color/255.0);                 // CCR1 PWM duty cycle
-    tok = strtok(NULL, " ");
-    color = strtol(tok, NULL, 10);
-    TA0CCR2 = PWM_PERIOD * (color/255.0);                // CCR2 PWM duty cycle
-    tok = strtok(NULL, " ");
-    color = strtol(tok, NULL, 10);
-    TA0CCR3 = PWM_PERIOD * (color/255.0);                  // CCR3 PWM duty cycle
-    */
-
     // Motor controlling code
     if (strcmp(buf, "go") == 0) {
         // Going forward
         CLI_Write("Command Caught: go\n\r");
-        stopped = 0;
-        Mode = 1;
-        main_solution();
+        if (stopped) {
+            stopped = 0;
+            Mode = 1;
+            run_controller();
+        }
 
     } else if (strcmp(buf, "stop") == 0) {
         // Stopping
@@ -721,7 +724,6 @@ static void messageArrived(MessageData* data) {
         stopped = 1;
         Mode = 0;
         Motor_Stop();
-        Pause();
     }
 
     return;
@@ -757,7 +759,7 @@ void PORT1_IRQHandler(void)
             S2buttonDebounce = 1;
 
             CLI_Write(" MAC Address: \n\r ");
-            CLI_Write(macStr);
+            CLI_Write((unsigned char *)macStr);
             CLI_Write("\n\r");
 
             MAP_Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
@@ -967,7 +969,7 @@ static _i32 initializeAppVariables()
 static void displayBanner()
 {
     CLI_Write("\n\r\n\r");
-    CLI_Write(" MQTT Twitter Controlled RGB LED - Version ");
+    CLI_Write(" MQTT Hallway Follower XTREME ");
     CLI_Write(APPLICATION_VERSION);
     CLI_Write("\n\r*******************************************************************************\n\r");
 }

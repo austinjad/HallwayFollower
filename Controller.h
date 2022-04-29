@@ -48,25 +48,10 @@ policies, either expressed or implied, of the FreeBSD Project.
 
 #include "msp.h"
 
-#ifdef USEOLED
-// this batch configures for OLED
 
-void OLEDinit(void);
-#endif
-
-#ifdef USEUART
-// this batch configures for UART link to PC
-#include "../inc/UART0.h"
-void UartSetCur(uint8_t newX, uint8_t newY);
-void UartClear(void);
-#endif
-
+#include <stdbool.h> // Have no idea why this is needed after renaming
 
 bool pollDistanceSensor_L21(void);
-// SysTick is just for debug profile, it can be removed
-void main1(void);
-
-void main2(void);
 
 // calibrated for 500mm track
 // right is raw sensor data from right sensor
@@ -76,20 +61,16 @@ int32_t Right(int32_t right);
 // return calibrated distance from center of Robot to left wall
 int32_t Left(int32_t left);
 
-void mainUNO(void);
-
-int Program21_1(void);
-// assumes track is 500mm
-
 void Controller(void);
 
 void Controller_Right(void);
 
+void GetDistances(uint32_t *left, uint32_t *center, uint32_t *right);
+
 void Pause(void);
 int32_t Mode;
-void main_solution(void);
-// MSP432 memory limited to q=11, N=2048
 
-void main4(void);
+void run_controller(void);
+// MSP432 memory limited to q=11, N=2048
 
 #endif
